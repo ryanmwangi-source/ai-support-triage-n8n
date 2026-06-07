@@ -1,0 +1,402 @@
+{
+  "name": "Triage Bot - 1. Data Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "new-ticket",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 432],
+      "id": "9282c2ac-c6f2-46d4-84c0-f7fab6c30bbf",
+      "name": "Webhook: New Ticket Batch",
+      "webhookId": "ec9fe8ea-52f4-46ed-87e5-72613fdbb4da"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1YpKAnWEdUc0kUmwdViPT4XsbfEhk0a_7QeLLT_p-YC4",
+          "mode": "list",
+          "cachedResultName": "AI-Powered Customer Support Triage",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1YpKAnWEdUc0kUmwdViPT4XsbfEhk0a_7QeLLT_p-YC4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "SupportTickets",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1YpKAnWEdUc0kUmwdViPT4XsbfEhk0a_7QeLLT_p-YC4/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [224, 432],
+      "id": "48680cef-1823-4bf8-bce6-e323f79715a1",
+      "name": "Read SupportTickets",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "kKq0sfkATK5zLJNS", "name": "Ryan's Google Sheets" }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 3 },
+          "conditions": [
+            {
+              "id": "flt-new-001",
+              "leftValue": "={{ $json.Status }}",
+              "rightValue": "New",
+              "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [448, 432],
+      "id": "d36a89bb-ae56-4a70-9c2b-45887c2ff1ca",
+      "name": "Keep Only New Tickets"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Clean and standardize this support ticket.\n\nTicketID: {{ $json.TicketID }}\nRaw Category: {{ $json.Category }}\nIssue text: {{ $json.Issue }}",
+        "hasOutputParser": true,
+        "needsFallback": true,
+        "options": {
+          "systemMessage": "You are a data-cleaning assistant for a customer-support inbox.\n\nRules:\n1. Standardize the ticket category into EXACTLY one of: \"Billing\", \"Technical\", \"General\".\n2. Set is_duplicate to true only when the issue is clearly a repeat of a very common request; otherwise false.\n\nReturn data strictly matching the required schema. Do not add commentary."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [704, 432],
+      "id": "a499761a-161e-40a3-b6df-0a4556b4827b",
+      "name": "Clean & Standardize (Janitor)",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": { "temperature": 0.2 }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [640, 672],
+      "id": "6ba9a179-9a16-451d-993f-0c7ffc49e5db",
+      "name": "Groq Primary (Janitor)",
+      "credentials": { "groqApi": { "id": "SV6KxF7bclHcoL4y", "name": "Groq account" } }
+    },
+    {
+      "parameters": {
+        "model": "mistral-large-latest",
+        "options": { "temperature": 0.2 }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatMistralCloud",
+      "typeVersion": 1,
+      "position": [784, 672],
+      "id": "e4281698-18db-4ff6-ae16-3dcf55c48614",
+      "name": "Mistral Fallback (Janitor)",
+      "credentials": { "mistralCloudApi": { "id": "7RtoBZQtppgSyYMl", "name": "Mistral Cloud account" } }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"clean_category\": {\n      \"type\": \"string\",\n      \"enum\": [\"Billing\", \"Technical\", \"General\"]\n    },\n    \"is_duplicate\": {\n      \"type\": \"boolean\"\n    }\n  },\n  \"required\": [\"clean_category\", \"is_duplicate\"]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [928, 672],
+      "id": "6a43766a-6230-48eb-824f-e78b70ba6cb5",
+      "name": "Schema: Clean Category"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyse this support issue, classify its urgency, and draft a polite reply.\n\nTicketID: {{ $('Read SupportTickets').item.json.TicketID }}\nStandardized Category: {{ $json.output.clean_category }}\nIssue: {{ $('Read SupportTickets').item.json.Issue }}",
+        "hasOutputParser": true,
+        "needsFallback": true,
+        "options": {
+          "systemMessage": "You are a senior customer-support triage officer.\n\nRules:\n1. Classify urgency as EXACTLY one of: \"High\", \"Medium\", \"Low\". Reserve \"High\" for outages, security/billing failures, data loss, or anything causing the customer to lose money or access right now.\n2. Write a short, warm, professional suggested_response (2-4 sentences) addressed to the customer.\n\nReturn data strictly matching the required schema. Do not add commentary."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [1200, 432],
+      "id": "ac258aed-37ac-4747-91cb-d719d046c3a7",
+      "name": "Prioritise & Draft (Triage Officer)",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": { "temperature": 0.3 }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [1136, 672],
+      "id": "05140da9-d833-4c29-a6fd-76ad4485b5be",
+      "name": "Groq Primary (Triage)",
+      "credentials": { "groqApi": { "id": "SV6KxF7bclHcoL4y", "name": "Groq account" } }
+    },
+    {
+      "parameters": {
+        "model": "mistral-large-latest",
+        "options": { "temperature": 0.3 }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatMistralCloud",
+      "typeVersion": 1,
+      "position": [1280, 672],
+      "id": "861f66c8-4081-4980-8c51-142a26cfd38b",
+      "name": "Mistral Fallback (Triage)",
+      "credentials": { "mistralCloudApi": { "id": "7RtoBZQtppgSyYMl", "name": "Mistral Cloud account" } }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"urgency\": {\n      \"type\": \"string\",\n      \"enum\": [\"High\", \"Medium\", \"Low\"]\n    },\n    \"suggested_response\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\"urgency\", \"suggested_response\"]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [1424, 672],
+      "id": "fe10afd8-e6ae-4c33-bc15-12924323fadf",
+      "name": "Schema: Urgency & Reply"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "as-tid", "name": "TicketID", "value": "={{ $('Read SupportTickets').item.json.TicketID }}", "type": "string" },
+            { "id": "as-email", "name": "CustomerEmail", "value": "={{ $('Read SupportTickets').item.json.CustomerEmail }}", "type": "string" },
+            { "id": "as-issue", "name": "Issue", "value": "={{ $('Read SupportTickets').item.json.Issue }}", "type": "string" },
+            { "id": "as-cat", "name": "CleanCategory", "value": "={{ $('Clean & Standardize (Janitor)').item.json.output.clean_category }}", "type": "string" },
+            { "id": "as-dup", "name": "IsDuplicate", "value": "={{ $('Clean & Standardize (Janitor)').item.json.output.is_duplicate }}", "type": "boolean" },
+            { "id": "as-urg", "name": "Urgency", "value": "={{ $json.output.urgency }}", "type": "string" },
+            { "id": "as-resp", "name": "SuggestedResponse", "value": "={{ $json.output.suggested_response }}", "type": "string" },
+            { "id": "as-model", "name": "ModelUsed", "value": "Groq llama-3.3-70b (fallback: Mistral large)", "type": "string" },
+            { "id": "as-ts", "name": "ProcessedAt", "value": "={{ $now.toISO() }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1680, 432],
+      "id": "28d05627-0354-4c66-8339-3656ae096a45",
+      "name": "Assemble Triaged Record"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1YpKAnWEdUc0kUmwdViPT4XsbfEhk0a_7QeLLT_p-YC4",
+          "mode": "list",
+          "cachedResultName": "AI-Powered Customer Support Triage",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1YpKAnWEdUc0kUmwdViPT4XsbfEhk0a_7QeLLT_p-YC4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 106716069,
+          "mode": "list",
+          "cachedResultName": "TriagedTickets",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1YpKAnWEdUc0kUmwdViPT4XsbfEhk0a_7QeLLT_p-YC4/edit#gid=106716069"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "TicketID": "={{ $json.TicketID }}",
+            "CleanCategory": "={{ $json.CleanCategory }}",
+            "Urgency": "={{ $json.Urgency }}",
+            "IsDuplicate": "={{ $json.IsDuplicate }}",
+            "SuggestedResponse": "={{ $json.SuggestedResponse }}",
+            "ModelUsed": "={{ $json.ModelUsed }}",
+            "ProcessedAt": "={{ $json.ProcessedAt }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "TicketID", "displayName": "TicketID", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "CleanCategory", "displayName": "CleanCategory", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Urgency", "displayName": "Urgency", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "SuggestedResponse", "displayName": "SuggestedResponse", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "IsDuplicate", "displayName": "IsDuplicate", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "ModelUsed", "displayName": "ModelUsed", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "ProcessedAt", "displayName": "ProcessedAt", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1920, 320],
+      "id": "13eeef94-d57c-4757-aa8f-c699378262c0",
+      "name": "Log ALL Tickets to TriagedTickets",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "kKq0sfkATK5zLJNS", "name": "Ryan's Google Sheets" }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 3 },
+          "conditions": [
+            { "id": "if-high-001", "leftValue": "={{ $json.Urgency }}", "rightValue": "High", "operator": { "type": "string", "operation": "equals" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1920, 528],
+      "id": "d3b5f28e-ac31-4c8c-b788-c2b07ea7b7ff",
+      "name": "Is Urgent? (High)"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "bBqASnlNJx8w4Nnb",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/bBqASnlNJx8w4Nnb",
+          "cachedResultName": "Triage Bot - 3. Human Response / Email"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": { "waitForSubWorkflow": true }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [2160, 432],
+      "id": "19b78ede-2d65-4a65-8904-753795c350b7",
+      "name": "Escalate to Human Response WF",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2160, 640],
+      "id": "cc29952e-9a65-4aaa-bc71-41f8921ff4b2",
+      "name": "Non-Urgent (Logged Only)"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [448, 640],
+      "id": "63723b9b-6474-4fdf-a69b-32059a771482",
+      "name": "Read Failed (caught)"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2160, 224],
+      "id": "457d5cbc-6918-4036-a5b6-11aa017ce680",
+      "name": "Log Failed (caught)"
+    },
+    {
+      "parameters": {
+        "content": "## 1. DATA PROCESSING WORKFLOW\n\nWebhook receives a \"process now\" signal, reads every ticket, then runs a 2-stage AI pipeline:\n\n**Janitor** -> standardizes category + flags duplicates (schema-enforced).\n**Triage Officer** -> classifies urgency + drafts a reply (schema-enforced).\n\nReliability built in:\n- Structured Output Parsers (no fragile JSON string-parsing).\n- Groq primary -> Mistral fallback on BOTH agents.\n- Retry-on-fail (3x) on agents + Sheets nodes.\n- Continue-on-error so one bad row never kills the batch.\n\nGOVERNANCE FIX: EVERY ticket is logged to TriagedTickets (with model + timestamp) BEFORE the urgency branch -- the original design only logged urgent ones.",
+        "height": 360,
+        "width": 420,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "id": "a8eb6781-c8af-4146-b4a1-ff192bac1a98",
+      "name": "Overview Note"
+    },
+    {
+      "parameters": {
+        "content": "### Escalation Logic\nHigh urgency -> calls the separate **Human Response / Email** workflow (urgent internal alert + customer reply draft).\n\nMedium/Low -> already logged, no interruption.",
+        "height": 220,
+        "width": 320,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1648, 704],
+      "id": "fc2cecb8-b0c6-44dd-ad40-13a48c6d0339",
+      "name": "Escalation Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook: New Ticket Batch": { "main": [[{ "node": "Read SupportTickets", "type": "main", "index": 0 }]] },
+    "Read SupportTickets": {
+      "main": [
+        [{ "node": "Keep Only New Tickets", "type": "main", "index": 0 }],
+        [{ "node": "Read Failed (caught)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Keep Only New Tickets": { "main": [[{ "node": "Clean & Standardize (Janitor)", "type": "main", "index": 0 }]] },
+    "Groq Primary (Janitor)": { "ai_languageModel": [[{ "node": "Clean & Standardize (Janitor)", "type": "ai_languageModel", "index": 0 }]] },
+    "Mistral Fallback (Janitor)": { "ai_languageModel": [[{ "node": "Clean & Standardize (Janitor)", "type": "ai_languageModel", "index": 1 }]] },
+    "Schema: Clean Category": { "ai_outputParser": [[{ "node": "Clean & Standardize (Janitor)", "type": "ai_outputParser", "index": 0 }]] },
+    "Clean & Standardize (Janitor)": { "main": [[{ "node": "Prioritise & Draft (Triage Officer)", "type": "main", "index": 0 }]] },
+    "Groq Primary (Triage)": { "ai_languageModel": [[{ "node": "Prioritise & Draft (Triage Officer)", "type": "ai_languageModel", "index": 0 }]] },
+    "Mistral Fallback (Triage)": { "ai_languageModel": [[{ "node": "Prioritise & Draft (Triage Officer)", "type": "ai_languageModel", "index": 1 }]] },
+    "Schema: Urgency & Reply": { "ai_outputParser": [[{ "node": "Prioritise & Draft (Triage Officer)", "type": "ai_outputParser", "index": 0 }]] },
+    "Prioritise & Draft (Triage Officer)": { "main": [[{ "node": "Assemble Triaged Record", "type": "main", "index": 0 }]] },
+    "Assemble Triaged Record": {
+      "main": [[
+        { "node": "Log ALL Tickets to TriagedTickets", "type": "main", "index": 0 },
+        { "node": "Is Urgent? (High)", "type": "main", "index": 0 }
+      ]]
+    },
+    "Log ALL Tickets to TriagedTickets": {
+      "main": [
+        [],
+        [{ "node": "Log Failed (caught)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Is Urgent? (High)": {
+      "main": [
+        [{ "node": "Escalate to Human Response WF", "type": "main", "index": 0 }],
+        [{ "node": "Non-Urgent (Logged Only)", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "YSjtuckHuTkzUoc0",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "489ec458-1560-4243-808a-e240315cad1e",
+  "meta": { "instanceId": "8fe1c9684e96b91e17560af1f37ca55733604b33a31c482c3e81dbd987efa8be" },
+  "id": "lP73oLFn3pQ01yts",
+  "tags": []
+}

@@ -1,0 +1,28 @@
+# Secrets & credentials (never commit)
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+service-account*.json
+secrets/
+
+# n8n local data / encryption keys
+.n8n/
+n8n-data/
+
+# Node build artifacts (doc generators)
+node_modules/
+_docbuild/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Logs & temp
+*.log
+tmp/
+temp/

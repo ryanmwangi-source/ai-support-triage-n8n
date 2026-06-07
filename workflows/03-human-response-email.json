@@ -1,0 +1,95 @@
+{
+  "name": "Triage Bot - 3. Human Response / Email",
+  "nodes": [
+    {
+      "parameters": { "inputSource": "passthrough" },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 464],
+      "id": "e54a7d80-4f60-4b27-a614-302c9b47a6e9",
+      "name": "When Called by Data Processing"
+    },
+    {
+      "parameters": {
+        "sendTo": "ryan.mwangi5@student.moringaschool.com",
+        "subject": "=URGENT Ticket {{ $json.TicketID }} - {{ $json.CleanCategory }}",
+        "message": "=An URGENT support ticket has been triaged and needs a human now.\n\nTicket ID: {{ $json.TicketID }}\nCategory: {{ $json.CleanCategory }}\nUrgency: {{ $json.Urgency }}\nCustomer: {{ $json.CustomerEmail }}\nLikely duplicate: {{ $json.IsDuplicate }}\n\nIssue:\n{{ $json.Issue }}\n\nAI-suggested reply (saved as a Gmail draft for your review):\n{{ $json.SuggestedResponse }}\n\nProcessed at {{ $json.ProcessedAt }} using {{ $json.ModelUsed }}.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [240, 352],
+      "id": "7998e4ab-5c55-40ad-8614-d8e48d7abfec",
+      "name": "Internal Urgent Alert (sent)",
+      "webhookId": "71308632-5168-4f96-bf31-fd09e02790de",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": { "gmailOAuth2": { "id": "kNJFk3eoaf9XE63X", "name": "Ryan's Gmail" } }
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "subject": "=Re: your support request (Ticket {{ $json.TicketID }})",
+        "message": "=Hi,\n\n{{ $json.SuggestedResponse }}\n\nYour reference is Ticket {{ $json.TicketID }} ({{ $json.CleanCategory }}). A member of our team will follow up if anything further is needed.\n\nWarm regards,\nCustomer Support Team",
+        "options": { "sendTo": "={{ $json.CustomerEmail }}" }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [240, 576],
+      "id": "7cebaf09-76e2-41ff-ab80-7717fb73341c",
+      "name": "Customer Reply (draft for review)",
+      "webhookId": "694f66ae-2795-4719-a293-f3e4c290d3f8",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "credentials": { "gmailOAuth2": { "id": "kNJFk3eoaf9XE63X", "name": "Ryan's Gmail" } },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [480, 464],
+      "id": "c271733b-88a6-45c4-89a1-6671ce7f57f2",
+      "name": "Done"
+    },
+    {
+      "parameters": {
+        "content": "## 3. HUMAN RESPONSE / EMAIL WORKFLOW\n\nCalled by Workflow 1 only for HIGH-urgency tickets.\n\n- **Internal Urgent Alert** -> sent immediately to the support team so a human can act.\n- **Customer Reply** -> the AI's suggested_response is saved as a **Gmail draft** (human-in-the-loop), never auto-sent. A person reviews and clicks send.\n\nThis keeps a human in control of anything customer-facing - the production-safe choice for a sellable product.",
+        "height": 320,
+        "width": 420,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "id": "9f110808-da48-464a-aa13-04dfaa800973",
+      "name": "Human Response Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Called by Data Processing": {
+      "main": [[
+        { "node": "Internal Urgent Alert (sent)", "type": "main", "index": 0 },
+        { "node": "Customer Reply (draft for review)", "type": "main", "index": 0 }
+      ]]
+    },
+    "Internal Urgent Alert (sent)": { "main": [[{ "node": "Done", "type": "main", "index": 0 }]] },
+    "Customer Reply (draft for review)": { "main": [[{ "node": "Done", "type": "main", "index": 0 }]] }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "YSjtuckHuTkzUoc0",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "5cca7dbb-54e3-4fa5-be69-e1241fcd4a95",
+  "meta": { "instanceId": "8fe1c9684e96b91e17560af1f37ca55733604b33a31c482c3e81dbd987efa8be" },
+  "id": "bBqASnlNJx8w4Nnb",
+  "tags": []
+}
